@@ -10,9 +10,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/metrics/pkg/apis/external_metrics"
 
@@ -23,7 +20,7 @@ import (
 type mongoDBScaler struct {
 	metricType v2.MetricTargetType
 	metadata   mongoDBMetadata
-	client     *mongo.Client
+	client     *pooledMongoClient
 	logger     logr.Logger
 }
 
@@ -96,7 +93,7 @@ func parseMongoDBMetadata(config *scalersconfig.ScalerConfig) (mongoDBMetadata, 
 	return meta, nil
 }
 
-func createMongoDBClient(ctx context.Context, meta mongoDBMetadata) (*mongo.Client, error) {
+func createMongoDBClient(ctx context.Context, meta mongoDBMetadata) (*pooledMongoClient, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -117,14 +114,9 @@ func createMongoDBClient(ctx context.Context, meta mongoDBMetadata) (*mongo.Clie
 		connString = u.String()
 	}
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(connString))
+	client, err := globalMongoClientPool.GetClient(ctx, connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mongodb client: %w", err)
-	}
-
-	err = client.Ping(ctx, readpref.Primary())
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping mongodb: %w", err)
 	}
 
 	return client, nil
@@ -132,7 +124,7 @@ func createMongoDBClient(ctx context.Context, meta mongoDBMetadata) (*mongo.Clie
 
 func (s *mongoDBScaler) Close(ctx context.Context) error {
 	if s.client != nil {
-		err := s.client.Disconnect(ctx)
+		err := s.client.Close(ctx)
 		if err != nil {
 			s.logger.Error(err, "Error closing mongodb connection")
 			return err

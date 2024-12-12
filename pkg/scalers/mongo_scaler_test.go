@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"go.mongodb.org/mongo-driver/mongo"
 	v2 "k8s.io/api/autoscaling/v2"
 
 	"github.com/kedacore/keda/v2/pkg/scalers/scalersconfig"
@@ -129,7 +128,7 @@ func TestMongoDBGetMetricSpecForScaling(t *testing.T) {
 		if err != nil {
 			t.Fatal("Could not parse metadata:", err)
 		}
-		mockMongoDBScaler := mongoDBScaler{metricType: v2.AverageValueMetricType, metadata: meta, client: &mongo.Client{}, logger: logr.Discard()}
+		mockMongoDBScaler := mongoDBScaler{metricType: v2.AverageValueMetricType, metadata: meta, client: &pooledMongoClient{}, logger: logr.Discard()}
 
 		metricSpec := mockMongoDBScaler.GetMetricSpecForScaling(context.Background())
 		metricName := metricSpec[0].External.Metric.Name
@@ -140,7 +139,7 @@ func TestMongoDBGetMetricSpecForScaling(t *testing.T) {
 }
 
 func TestJson2BsonDoc(t *testing.T) {
-	var testJSON = `{"name":"carson"}`
+	testJSON := `{"name":"carson"}`
 	doc, err := json2BsonDoc(testJSON)
 	if err != nil {
 		t.Error("convert testJson to Bson.Doc err:", err)
